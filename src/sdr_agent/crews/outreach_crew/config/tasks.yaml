@@ -1,0 +1,61 @@
+research_task:
+  description: >
+    Research {prospect_name} ({prospect_title}) at {prospect_company}
+    for a {campaign_type} outreach email from {sender_name} at {sender_company}.
+
+    Company website if provided: {company_website}
+    Extra notes from the sender: {extra_notes}
+
+    How to work:
+    1. If search/scrape tools are available, look up the company and any
+       recent public news, hiring, funding, product, or ops signals.
+    2. If a website is provided, scrape it for what they sell and who they serve.
+    3. Infer 2-4 likely priorities for someone in this role — mark inferences
+       as inferences, not facts.
+    4. Produce personalization hooks that are safe if a fact cannot be verified.
+    5. Do not invent awards, quotes, headcount, revenue, or personal life details.
+
+    Focus on information that would make a first email feel relevant.
+  expected_output: >
+    A structured research brief with: company_summary (3-5 sentences),
+    likely_priorities (2-4 items), personalization_hooks (3 items),
+    recent_signals (0-5 items), sources (URLs or 'none'), and unknowns
+    (what you could not verify).
+  agent: prospect_researcher
+
+write_email_task:
+  description: >
+    Write one {campaign_type} email from {sender_name} ({sender_title})
+    at {sender_company} to {prospect_name} ({prospect_title}) at
+    {prospect_company}. Prospect email: {prospect_email}.
+
+    Product: {product_name}
+    Value proposition: {value_proposition}
+    Offer details (use for offer campaigns): {offer_details}
+    Update details (use for update campaigns): {update_details}
+    Sender email: {sender_email}
+    Physical mailing address: {physical_address}
+
+    Campaign rules:
+    - cold: first-touch. Personalize from research. Soft CTA (15-min chat
+      or yes/no question). Do not attach a hard sell.
+    - offer: lead with the specific offer, who it is for, what they get,
+      deadline if real, and a single CTA. Do not invent a deadline.
+    - update: share a useful product/company update tied to their world.
+      Assume some prior awareness unless research says otherwise. CTA can
+      be a reply, resource, or booking link if provided in the notes.
+
+    Style:
+    - Subject: specific, human, under 8 words, not clickbait, no ALL CAPS
+    - Body: 80-140 words, 2-4 short paragraphs, one CTA
+    - Sign-off with sender name, title, company, email
+    - Last line: "If this isn't relevant, reply STOP and I won't email again."
+    - Include the physical mailing address in the signature
+    - Do not mention tools, the research brief, or that you are an AI
+    - Do not claim you "noticed" something unless it is in the research
+      with a source, or it was provided in extra_notes
+  expected_output: >
+    A structured email with fields: subject, preview_text, body (plain text,
+    including greeting, signature, address, and opt-out line),
+    personalization_hooks_used, call_to_action, and compliance_notes.
+  agent: sdr_copywriter

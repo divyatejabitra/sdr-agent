@@ -1,0 +1,23 @@
+[project]
+name = "sdr_agent"
+version = "0.1.0"
+description = "Sales development Flow that drafts cold, offer, and update emails"
+authors = [{ name = "Your Name", email = "you@example.com" }]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "crewai[tools]>=1.15.2,<2.0.0"
+]
+
+[project.scripts]
+kickoff = "sdr_agent.main:kickoff"
+run_crew = "sdr_agent.main:kickoff"
+plot = "sdr_agent.main:plot"
+run_with_trigger = "sdr_agent.main:run_with_trigger"
+run_batch = "sdr_agent.main:run_batch"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.crewai]
+type = "flow"

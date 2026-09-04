@@ -1,0 +1,19 @@
+{
+  "campaign_type": "cold",
+  "prospect_name": "Jordan Hale",
+  "prospect_title": "VP of Operations",
+  "prospect_email": "jordan.hale@example.com",
+  "prospect_company": "Northline Logistics",
+  "company_website": "https://www.example.com",
+  "sender_name": "Alex Rivera",
+  "sender_title": "Account Executive",
+  "sender_company": "Harborline",
+  "sender_email": "alex@harborline.example",
+  "sender_phone": "+1-555-0100",
+  "physical_address": "100 Market Street, Suite 400, Austin, TX 78701",
+  "product_name": "Harborline Dispatch",
+  "value_proposition": "Cuts same-day exception handling time for mid-market carriers by giving ops a live exception queue instead of spreadsheet fire drills.",
+  "offer_details": "Two-week pilot on one lane with a shared success metric: exception cycle time.",
+  "update_details": "We launched lane-level exception alerts in Slack, so night-shift coordinators see delays without opening the TMS.",
+  "extra_notes": "Mid-market regional carrier. Sample lead for local testing — do not send unless SEND_EMAILS is enabled and the address is owned by you."
+}
