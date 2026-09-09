@@ -12,25 +12,40 @@ research_task:
     1. If tools are available, look up the company and any recent public
        news, hiring, funding, product, or ops signals, and scrape the
        website if one is provided. Cite only URLs you actually retrieved.
-    2. If tools are NOT available, skip straight to step 3 - work only from
+    2. If tools are NOT available, skip straight to step 4 - work only from
        the lead file and extra_notes above. Never say you "searched",
        "found no results", or "couldn't find" anything online when no
        search tool ran; that misrepresents a lookup that never happened.
-    3. Infer 2-4 likely priorities for someone in this role — mark inferences
+    3. If a tool DID run but returned nothing relevant or verifiable (e.g.
+       no results, an unrelated company, a dead domain), do not assert any
+       specific factual claim about the company from that empty result -
+       not even something that sounds minor, like domain or business
+       status. Instead record it plainly in unknowns, e.g. "search for
+       {prospect_company} returned no verifiable public results."
+    4. Infer 2-4 likely priorities for someone in this role — mark inferences
        as inferences, not facts.
-    4. Produce personalization hooks that are safe if a fact cannot be verified.
-    5. Do not invent awards, quotes, headcount, revenue, or personal life details.
-    6. Do not list the prospect's company_website as a "source" unless a
+    5. Produce personalization hooks that are safe if a fact cannot be verified.
+    6. Do not invent awards, quotes, headcount, revenue, personal life
+       details, or the technical/operational status of anything (a
+       website, a product, a filing) that you did not actually verify from
+       a retrieved source this run.
+    7. Do not list the prospect's company_website as a "source" unless a
        scrape tool actually fetched it this run.
+    8. Every specific, checkable claim in company_summary or recent_signals
+       must trace to an entry in sources. If it doesn't, it isn't a
+       verified claim - move it to unknowns or drop it, don't state it.
 
     Focus on information that would make a first email feel relevant.
   expected_output: >
     A structured research brief with: used_live_tools (true only if a
-    search/scrape tool call actually ran), company_summary (3-5 sentences),
+    search/scrape tool call actually ran), company_summary (3-5 sentences,
+    containing only claims traceable to sources - general role/industry
+    inference belongs in likely_priorities, not stated as fact here),
     likely_priorities (2-4 items), personalization_hooks (3 items),
-    recent_signals (0-5 items, empty if no tools ran), sources (URLs
-    actually retrieved this run, empty list if no tools ran), and unknowns
-    (what you could not verify).
+    recent_signals (0-5 items, empty if no tools ran or nothing verifiable
+    turned up), sources (URLs actually retrieved this run, empty list if no
+    tools ran or nothing relevant was found), and unknowns (what you could
+    not verify, including any search that ran but returned nothing useful).
   agent: prospect_researcher
 
 write_email_task:

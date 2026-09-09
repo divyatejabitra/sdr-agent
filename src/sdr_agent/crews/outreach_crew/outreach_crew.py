@@ -1,3 +1,4 @@
+import json
 import os
 
 from crewai import Agent, Crew, Process, Task
@@ -38,6 +39,68 @@ def research_tools_status_note() -> str:
         "search happened. Work only from the lead file and extra_notes. sources must be an "
         "empty list, and used_live_tools must be false."
     )
+
+
+# Words that only mean something if a source was actually checked. If sources
+# is empty, none of these should appear as an assertion about the company -
+# the model has a tendency to state a plausible-sounding specific detail
+# (e.g. "the website is expired") to explain away an empty search result,
+# instead of just saying the search found nothing.
+_UNVERIFIED_CLAIM_MARKERS = [
+    "expired",
+    "inactive website",
+    "domain is inactive",
+    "shut down",
+    "shutdown",
+    "ceased operations",
+    "no longer in business",
+    "acquired by",
+    "bankrupt",
+    "went public",
+    "funding round",
+    "raised $",
+    "revenue of",
+    "headquartered in",
+    "founded in",
+    "employees",
+    "recently launched",
+    "recently hired",
+]
+
+
+def _parse_prospect_intel(output: TaskOutput) -> ProspectIntel | None:
+    """
+    TaskOutput.pydantic is not reliably populated at guardrail-check time
+    (CrewAI defers pydantic parsing when a guardrail is attached), so parse
+    output.raw directly instead of trusting output.pydantic here.
+    """
+    if isinstance(output.pydantic, ProspectIntel):
+        return output.pydantic
+    try:
+        return ProspectIntel.model_validate(json.loads(output.raw))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+
+def _research_guardrail(output: TaskOutput) -> tuple[bool, str | TaskOutput]:
+    intel = _parse_prospect_intel(output)
+    if intel is None or intel.sources:
+        # Either couldn't parse structured output yet, or claims are backed
+        # by cited sources - nothing to check here.
+        return (True, output)
+
+    text = f"{intel.company_summary} {' '.join(intel.recent_signals)}".lower()
+    hits = sorted({marker for marker in _UNVERIFIED_CLAIM_MARKERS if marker in text})
+    if hits:
+        return (
+            False,
+            "sources is empty, so none of this brief's claims are verified, but "
+            f"company_summary/recent_signals still assert specific details ({', '.join(hits)}). "
+            "If a search ran and found nothing relevant, say exactly that in unknowns "
+            "(e.g. 'search for the company name returned no verifiable results') - do not "
+            "state a specific fact you did not actually confirm from a retrieved source.",
+        )
+    return (True, output)
 
 
 def _email_guardrail(output: TaskOutput) -> tuple[bool, str | TaskOutput]:
@@ -81,6 +144,8 @@ class OutreachCrew:
         return Task(
             config=self.tasks_config["research_task"],  # type: ignore[index]
             output_pydantic=ProspectIntel,
+            guardrail=_research_guardrail,
+            guardrail_max_retries=2,
         )
 
     @task
