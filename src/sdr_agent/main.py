@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from crewai.flow import Flow, listen, router, start
 
-from sdr_agent.crews.outreach_crew.outreach_crew import OutreachCrew
+from sdr_agent.crews.outreach_crew.outreach_crew import OutreachCrew, research_tools_status_note
 from sdr_agent.schemas import OutreachEmail, ProspectIntel
 from sdr_agent.tools.send_email import send_plain_email
 
@@ -79,7 +79,9 @@ class SDRFlow(Flow[SDRState]):
 
     @listen(load_campaign)
     def run_outreach(self):
-        result = OutreachCrew().crew().kickoff(inputs=self.state.model_dump())
+        inputs = self.state.model_dump()
+        inputs["tools_status_note"] = research_tools_status_note()
+        result = OutreachCrew().crew().kickoff(inputs=inputs)
         outputs = result.tasks_output
 
         research = outputs[0].pydantic if outputs else None

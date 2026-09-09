@@ -6,20 +6,30 @@ research_task:
     Company website if provided: {company_website}
     Extra notes from the sender: {extra_notes}
 
+    Tool availability for this run: {tools_status_note}
+
     How to work:
-    1. If search/scrape tools are available, look up the company and any
-       recent public news, hiring, funding, product, or ops signals.
-    2. If a website is provided, scrape it for what they sell and who they serve.
+    1. If tools are available, look up the company and any recent public
+       news, hiring, funding, product, or ops signals, and scrape the
+       website if one is provided. Cite only URLs you actually retrieved.
+    2. If tools are NOT available, skip straight to step 3 - work only from
+       the lead file and extra_notes above. Never say you "searched",
+       "found no results", or "couldn't find" anything online when no
+       search tool ran; that misrepresents a lookup that never happened.
     3. Infer 2-4 likely priorities for someone in this role — mark inferences
        as inferences, not facts.
     4. Produce personalization hooks that are safe if a fact cannot be verified.
     5. Do not invent awards, quotes, headcount, revenue, or personal life details.
+    6. Do not list the prospect's company_website as a "source" unless a
+       scrape tool actually fetched it this run.
 
     Focus on information that would make a first email feel relevant.
   expected_output: >
-    A structured research brief with: company_summary (3-5 sentences),
+    A structured research brief with: used_live_tools (true only if a
+    search/scrape tool call actually ran), company_summary (3-5 sentences),
     likely_priorities (2-4 items), personalization_hooks (3 items),
-    recent_signals (0-5 items), sources (URLs or 'none'), and unknowns
+    recent_signals (0-5 items, empty if no tools ran), sources (URLs
+    actually retrieved this run, empty list if no tools ran), and unknowns
     (what you could not verify).
   agent: prospect_researcher
 

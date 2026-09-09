@@ -2,6 +2,10 @@ from pydantic import BaseModel, Field
 
 
 class ProspectIntel(BaseModel):
+    used_live_tools: bool = Field(
+        description="True only if a web search or scrape tool call actually ran this task. "
+        "False if research came only from the lead file and extra_notes."
+    )
     company_summary: str = ""
     likely_priorities: list[str] = Field(default_factory=list)
     personalization_hooks: list[str] = Field(default_factory=list)
