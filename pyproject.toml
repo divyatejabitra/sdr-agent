@@ -5,7 +5,17 @@ description = "Sales development Flow that drafts cold, offer, and update emails
 authors = [{ name = "Your Name", email = "you@example.com" }]
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "crewai[tools]>=1.15.2,<2.0.0"
+    "crewai[tools]>=1.15.2,<2.0.0",
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "sqlalchemy>=2.0,<3.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "alembic>=1.13,<2.0",
+    "pydantic-settings>=2.4,<3.0",
+    "bcrypt>=4.1,<5.0",
+    "itsdangerous>=2.2,<3.0",
+    "httpx>=0.27,<1.0",
+    "cryptography>=42.0",
 ]
 
 [project.scripts]
@@ -14,6 +24,8 @@ run_crew = "sdr_agent.main:kickoff"
 plot = "sdr_agent.main:plot"
 run_with_trigger = "sdr_agent.main:run_with_trigger"
 run_batch = "sdr_agent.main:run_batch"
+sdr-worker = "sdr_workspace.worker:run_forever"
+sdr-workspace = "sdr_workspace.cli:main"
 
 [build-system]
 requires = ["hatchling"]
