@@ -48,6 +48,9 @@ research_task:
     not verify, including any search that ran but returned nothing useful).
   agent: prospect_researcher
 
+# Shared base for the three draft variants. outreach_crew.py appends a
+# per-variant voice directive to this description and assigns each draft its
+# own copywriter agent, so the compliance and style rules live in one place.
 write_email_task:
   description: >
     Write one {campaign_type} email from {sender_name} ({sender_title})
@@ -82,5 +85,35 @@ write_email_task:
   expected_output: >
     A structured email with fields: subject, preview_text, body (plain text,
     including greeting, signature, address, and opt-out line),
-    personalization_hooks_used, call_to_action, and compliance_notes.
-  agent: sdr_copywriter
+    personalization_hooks_used, call_to_action, compliance_notes, and variant
+    (the voice label given in your instructions).
+
+select_email_task:
+  description: >
+    Three {campaign_type} email drafts to {prospect_name} at {prospect_company}
+    are in your context, each written in a different voice (direct,
+    consultative, curious). Choose the ONE most likely to earn a reply.
+
+    Score each draft from 1 to 5 on:
+    - personalization grounded in the research, or safe role-based framing
+      when research is thin
+    - brevity and skimmability (80-140 words)
+    - a single, easy-to-answer ask
+    - an honest subject line that matches the body
+    - compliance: real sender identity, the physical mailing address, and the
+      opt-out line as the last line
+
+    Disqualify any draft that asserts a fact not found in the research, the
+    lead details, or extra_notes; uses fake urgency or clickbait; or is
+    missing the opt-out line or mailing address. If every draft is
+    disqualified, pick the least bad one and state the problem in
+    compliance_notes.
+
+    Return the winning draft exactly as written. Do not edit its subject or
+    body. Copy its variant label into variant, and put 2-3 sentences on why
+    it beat the other two in selection_rationale.
+  expected_output: >
+    The winning email as a structured object with subject, preview_text, body,
+    personalization_hooks_used, call_to_action, compliance_notes, variant
+    (direct, consultative, or curious), and selection_rationale.
+  agent: email_judge

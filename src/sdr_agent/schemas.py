@@ -21,3 +21,10 @@ class OutreachEmail(BaseModel):
     personalization_hooks_used: list[str] = Field(default_factory=list)
     call_to_action: str = ""
     compliance_notes: str = ""
+    variant: str = ""
+
+
+class SelectedEmail(OutreachEmail):
+    """The judge's pick. Drafts use OutreachEmail so they cannot write their own rationale."""
+
+    selection_rationale: str = ""

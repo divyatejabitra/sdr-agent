@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -41,8 +42,14 @@ class SDRState(BaseModel):
     subject: str = ""
     preview_text: str = ""
     body: str = ""
+    variant: str = ""
+    selection_rationale: str = ""
     send_status: str = ""
     draft_path: str = ""
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").lower() in {"1", "true", "yes"}
 
 
 def _load_lead() -> dict:
@@ -95,6 +102,8 @@ class SDRFlow(Flow[SDRState]):
             self.state.subject = email.subject
             self.state.preview_text = email.preview_text
             self.state.body = email.body
+            self.state.variant = email.variant
+            self.state.selection_rationale = getattr(email, "selection_rationale", "")
         else:
             self.state.body = result.raw
             self.state.subject = self.state.subject or "(subject in body)"
@@ -111,7 +120,9 @@ class SDRFlow(Flow[SDRState]):
             f"- To: {self.state.prospect_email}\n"
             f"- Company: {self.state.prospect_company}\n"
             f"- Subject: {self.state.subject}\n"
-            f"- Preview: {self.state.preview_text}\n\n"
+            f"- Preview: {self.state.preview_text}\n"
+            f"- Voice: {self.state.variant or 'n/a'}\n"
+            f"- Why this draft won: {self.state.selection_rationale or 'n/a'}\n\n"
             f"---\n\n{self.state.body}\n"
         )
         if self.state.research_brief:
@@ -120,17 +131,37 @@ class SDRFlow(Flow[SDRState]):
         self.state.draft_path = str(draft_path)
         print(f"Draft saved to {draft_path}")
 
+    def _approved_by_human(self) -> bool:
+        # Fails closed: unattended runs (run_batch, run_with_trigger, no TTY)
+        # must never block on input() and never send without an explicit yes.
+        if not sys.stdin.isatty():
+            print("REQUIRE_APPROVAL is set but no interactive terminal is attached; not sending.")
+            return False
+        print(
+            f"\n--- Draft to {self.state.prospect_email} ---\n"
+            f"Subject: {self.state.subject}\n\n{self.state.body}\n"
+        )
+        return input("Send this email? [y/N]: ").strip().lower() in {"y", "yes"}
+
     @router(save_draft)
     def decide_delivery(self):
-        if os.getenv("SEND_EMAILS", "").lower() in {"1", "true", "yes"}:
-            return "send"
-        return "draft_only"
+        if not _env_flag("SEND_EMAILS"):
+            return "draft_only"
+        if _env_flag("REQUIRE_APPROVAL") and not self._approved_by_human():
+            return "draft_only"
+        return "send"
 
     @listen("draft_only")
     def keep_as_draft(self):
-        self.state.send_status = (
-            "Draft only. Review the file, then set SEND_EMAILS=true and SMTP_* to deliver."
-        )
+        if _env_flag("SEND_EMAILS"):
+            self.state.send_status = (
+                "Not sent: approval was declined or no interactive terminal was available. "
+                "The draft is saved for review."
+            )
+        else:
+            self.state.send_status = (
+                "Draft only. Review the file, then set SEND_EMAILS=true and SMTP_* to deliver."
+            )
         print(self.state.send_status)
         return self.state.send_status
 

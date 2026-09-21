@@ -7,9 +7,13 @@ The language model never sends mail on its own. The Flow delivers after the draf
 ## What you get
 
 1. Prospect research brief (web search/scrape when `SERPER_API_KEY` is set)
-2. One personalized email with subject, body, signature, mailing address, and opt-out line
-3. Files in `output/` for review
-4. Optional SMTP send
+2. Three drafts written in parallel in different voices (direct, consultative, curious)
+3. A judge agent that scores the drafts and picks one, with a short rationale
+4. The winning email with subject, body, signature, mailing address, and opt-out line
+5. Files in `output/` for review (the draft records which voice won and why)
+6. Optional SMTP send
+
+Drafting three variants and judging them costs roughly three times the drafting LLM calls of a single draft, plus one judge call, in exchange for picking the best of three instead of accepting the first.
 
 ## Setup
 
@@ -49,6 +53,8 @@ uv run python -c "from sdr_agent.main import plot; plot()"
 1. Review the markdown draft in `output/`
 2. Set `SEND_EMAILS=true` plus `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`
 3. Run again only for leads you are allowed to email
+
+To confirm each send by hand, also set `REQUIRE_APPROVAL=true`. The Flow then prints the winning draft and asks `Send this email? [y/N]` before delivering. Anything other than `y`/`yes` keeps it as a draft. If there is no interactive terminal (for example `run_batch` or `run_with_trigger`), it does not send and does not wait for input.
 
 Use addresses you own while testing. Follow CAN-SPAM / CASL and your own suppression list. This project does not scrape or buy contact lists.
 
