@@ -9,9 +9,13 @@ research_task:
     Tool availability for this run: {tools_status_note}
 
     How to work:
-    1. If tools are available, look up the company and any recent public
-       news, hiring, funding, product, or ops signals, and scrape the
-       website if one is provided. Cite only URLs you actually retrieved.
+    1. If tools are available, first plan 2-4 distinct, targeted searches
+       that cover different angles - e.g. recent company news, the
+       prospect's specific role or team, and any product/funding/hiring
+       signal - rather than one broad query. Run them together with
+       multi_search (one call, several queries, run in parallel) rather
+       than one search tool call at a time. Scrape the website too if one
+       is provided. Cite only URLs you actually retrieved.
     2. If tools are NOT available, skip straight to step 4 - work only from
        the lead file and extra_notes above. Never say you "searched",
        "found no results", or "couldn't find" anything online when no

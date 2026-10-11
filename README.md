@@ -6,12 +6,12 @@ The language model never sends mail on its own. The Flow delivers after the draf
 
 ## What you get
 
-1. Prospect research brief (web search/scrape when `SERPER_API_KEY` is set)
+1. Prospect research brief — when `SERPER_API_KEY` is set, the researcher plans 2-4 targeted queries itself and runs them in parallel in one `multi_search` call instead of one query at a time; without it, research uses only the lead file and `extra_notes`
 2. Three drafts written in parallel in different voices (direct, consultative, curious) — each on a genuinely different underlying model (OpenAI, Anthropic, Google Gemini) when those keys are set, not just three prompts on one model, for real diversity at no extra LLM-call cost
 3. A judge agent that scores the drafts and picks one, with a short rationale
 4. The winning email with subject, body, signature, mailing address, and opt-out line
 5. Files in `output/` for review (the draft records which voice won and why)
-6. Optional SMTP send
+6. Optional send — as HTML via SendGrid when `SENDGRID_API_KEY` is set, else plain-text SMTP
 7. A free, zero-LLM-cost compliance check before any of the above runs — a lead missing sender identity, physical address, or a recipient email fails fast instead of burning research + drafts + judge on a lead that can't produce a compliant email anyway
 
 Drafting three variants and judging them costs roughly three times the drafting LLM calls of a single draft, plus one judge call, in exchange for picking the best of three instead of accepting the first.
@@ -52,7 +52,7 @@ uv run python -c "from sdr_agent.main import plot; plot()"
 ## Sending mail
 
 1. Review the markdown draft in `output/`
-2. Set `SEND_EMAILS=true` plus `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`
+2. Set `SEND_EMAILS=true`, plus either `SENDGRID_API_KEY` (+ optionally `SENDGRID_FROM_EMAIL`) to send as HTML via SendGrid, or `SMTP_HOST`/`SMTP_PORT`/`SMTP_USERNAME`/`SMTP_PASSWORD`/`SMTP_FROM` for plain-text SMTP. SendGrid is used when its key is set; SMTP is the fallback.
 3. Run again only for leads you are allowed to email
 
 To confirm each send by hand, also set `REQUIRE_APPROVAL=true`. The Flow then prints the winning draft and asks `Send this email? [y/N]` before delivering. Anything other than `y`/`yes` keeps it as a draft. If there is no interactive terminal (for example `run_batch` or `run_with_trigger`), it does not send and does not wait for input.

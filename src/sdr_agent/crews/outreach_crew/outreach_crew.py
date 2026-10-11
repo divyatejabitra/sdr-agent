@@ -23,7 +23,9 @@ def _research_tools() -> list:
     if _research_tools_available():
         from crewai_tools import ScrapeWebsiteTool, SerperDevTool
 
-        tools = [SerperDevTool(), ScrapeWebsiteTool()]
+        from sdr_agent.tools.multi_search import MultiSearchTool
+
+        tools = [MultiSearchTool(), SerperDevTool(), ScrapeWebsiteTool()]
     return tools
 
 

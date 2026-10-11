@@ -12,7 +12,7 @@ from crewai.flow import Flow, listen, router, start
 
 from sdr_agent.crews.outreach_crew.outreach_crew import OutreachCrew, research_tools_status_note
 from sdr_agent.schemas import OutreachEmail, ProspectIntel
-from sdr_agent.tools.send_email import send_plain_email
+from sdr_agent.tools.send_email import send_email as _deliver_email
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 OUTPUT_DIR = PROJECT_ROOT / "output"
@@ -194,7 +194,7 @@ class SDRFlow(Flow[SDRState]):
 
     @listen("send")
     def deliver_email(self):
-        self.state.send_status = send_plain_email(
+        self.state.send_status = _deliver_email(
             to_address=self.state.prospect_email,
             subject=self.state.subject,
             body=self.state.body,
