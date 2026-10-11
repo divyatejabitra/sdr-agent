@@ -1,7 +1,7 @@
 import json
 import os
 
-from crewai import Agent, Crew, Process, Task
+from crewai import LLM, Agent, Crew, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
 from crewai.project import CrewBase, agent, crew, task
@@ -119,18 +119,37 @@ def _email_guardrail(output: TaskOutput) -> tuple[bool, str | TaskOutput]:
 # the same model (real diversity, zero extra LLM calls) - with a required env
 # var per non-OpenAI voice. _llm_for() falls back to OpenAI for a voice whose
 # key isn't set, so the crew still runs with only OPENAI_API_KEY configured.
-_VOICE_LLMS = {
-    "direct": ("openai/gpt-4o-mini", None),
-    "consultative": ("anthropic/claude-sonnet-5", "ANTHROPIC_API_KEY"),
-    "curious": ("groq/openai/gpt-oss-120b", "GROQ_API_KEY"),
+#
+# "curious" goes through Gemini's OpenAI-compatible endpoint rather than
+# crewai's native Gemini provider: this project's GOOGLE_API_KEY is an
+# AI Studio "Auth key" (starts "AQ."), which the native google-genai SDK
+# rejects outright ("Invalid authentication credentials"), but the
+# OpenAI-compatible endpoint accepts fine - the same approach
+# 2_openai/3_lab3.ipynb uses for Gemini.
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+GEMINI_MODEL = "gemini-3.8-flash"
+
+_FALLBACK_LLM = "openai/gpt-4o-mini"
+_VOICE_REQUIRED_KEYS = {
+    "direct": None,
+    "consultative": "ANTHROPIC_API_KEY",
+    "curious": "GOOGLE_API_KEY",
 }
 
 
-def _llm_for(voice: str) -> str:
-    model, required_key = _VOICE_LLMS[voice]
+def _llm_for(voice: str) -> str | LLM:
+    required_key = _VOICE_REQUIRED_KEYS[voice]
     if required_key and not os.getenv(required_key):
-        return "openai/gpt-4o-mini"
-    return model
+        return _FALLBACK_LLM
+    if voice == "consultative":
+        return "anthropic/claude-sonnet-5"
+    if voice == "curious":
+        return LLM(
+            model=f"openai/{GEMINI_MODEL}",
+            base_url=GEMINI_BASE_URL,
+            api_key=os.environ["GOOGLE_API_KEY"],
+        )
+    return _FALLBACK_LLM
 
 
 # One directive per draft variant. Each is appended to the shared

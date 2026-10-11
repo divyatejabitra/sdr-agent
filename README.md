@@ -7,7 +7,7 @@ The language model never sends mail on its own. The Flow delivers after the draf
 ## What you get
 
 1. Prospect research brief (web search/scrape when `SERPER_API_KEY` is set)
-2. Three drafts written in parallel in different voices (direct, consultative, curious) — each on a genuinely different underlying model (OpenAI, Anthropic, Groq) when those keys are set, not just three prompts on one model, for real diversity at no extra LLM-call cost
+2. Three drafts written in parallel in different voices (direct, consultative, curious) — each on a genuinely different underlying model (OpenAI, Anthropic, Google Gemini) when those keys are set, not just three prompts on one model, for real diversity at no extra LLM-call cost
 3. A judge agent that scores the drafts and picks one, with a short rationale
 4. The winning email with subject, body, signature, mailing address, and opt-out line
 5. Files in `output/` for review (the draft records which voice won and why)
@@ -25,7 +25,7 @@ crewai install
 cp .env.example .env
 ```
 
-Put your `OPENAI_API_KEY` in `.env`. Add `SERPER_API_KEY` if you want live company research. Add `ANTHROPIC_API_KEY` and/or `GROQ_API_KEY` for genuine cross-model draft diversity — each is independently optional; a voice whose key is missing falls back to OpenAI rather than failing.
+Put your `OPENAI_API_KEY` in `.env`. Add `SERPER_API_KEY` if you want live company research. Add `ANTHROPIC_API_KEY` and/or `GOOGLE_API_KEY` for genuine cross-model draft diversity — each is independently optional; a voice whose key is missing falls back to OpenAI rather than failing. `GOOGLE_API_KEY` works whether it's a classic AI Studio API key or an Auth key — see `.env.example` for why.
 
 Edit `data/sample_lead.json` (or point `LEADS_FILE` at your own JSON) with a real prospect you are allowed to contact, your product, and your physical mailing address.
 
