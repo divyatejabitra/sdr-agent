@@ -19,6 +19,18 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 SAMPLE_LEAD = PROJECT_ROOT / "data" / "sample_lead.json"
 VALID_CAMPAIGNS = {"cold", "offer", "update"}
 
+# Every field the sdr_copywriter backstory already promises will be in the
+# email (real sender identity, physical mailing address, a real recipient) -
+# checked here, before OutreachCrew runs, so a non-compliant lead costs
+# nothing instead of burning research + 3 drafts + judge first.
+_REQUIRED_COMPLIANCE_FIELDS = {
+    "sender_name": "sender_name",
+    "sender_company": "sender_company",
+    "sender_email": "sender_email",
+    "physical_address": "physical_address (required for CAN-SPAM/CASL compliance)",
+    "prospect_email": "prospect_email",
+}
+
 
 class SDRState(BaseModel):
     campaign_type: str = "cold"
@@ -52,6 +64,14 @@ def _env_flag(name: str) -> bool:
     return os.getenv(name, "").lower() in {"1", "true", "yes"}
 
 
+def _compliance_errors(state: "SDRState") -> list[str]:
+    return [
+        label
+        for field, label in _REQUIRED_COMPLIANCE_FIELDS.items()
+        if not getattr(state, field, "").strip()
+    ]
+
+
 def _load_lead() -> dict:
     lead_file = Path(os.getenv("LEADS_FILE", SAMPLE_LEAD))
     if not lead_file.exists():
@@ -79,6 +99,13 @@ class SDRFlow(Flow[SDRState]):
                 f"campaign_type must be one of {sorted(VALID_CAMPAIGNS)}, got {campaign!r}"
             )
         self.state.campaign_type = campaign
+
+        missing = _compliance_errors(self.state)
+        if missing:
+            raise ValueError(
+                f"Lead is missing required fields for a compliant email: {', '.join(missing)}"
+            )
+
         print(
             f"SDR campaign={campaign} prospect={self.state.prospect_name} "
             f"at {self.state.prospect_company}"

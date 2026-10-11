@@ -7,11 +7,12 @@ The language model never sends mail on its own. The Flow delivers after the draf
 ## What you get
 
 1. Prospect research brief (web search/scrape when `SERPER_API_KEY` is set)
-2. Three drafts written in parallel in different voices (direct, consultative, curious)
+2. Three drafts written in parallel in different voices (direct, consultative, curious) — each on a genuinely different underlying model (OpenAI, Anthropic, Groq) when those keys are set, not just three prompts on one model, for real diversity at no extra LLM-call cost
 3. A judge agent that scores the drafts and picks one, with a short rationale
 4. The winning email with subject, body, signature, mailing address, and opt-out line
 5. Files in `output/` for review (the draft records which voice won and why)
 6. Optional SMTP send
+7. A free, zero-LLM-cost compliance check before any of the above runs — a lead missing sender identity, physical address, or a recipient email fails fast instead of burning research + drafts + judge on a lead that can't produce a compliant email anyway
 
 Drafting three variants and judging them costs roughly three times the drafting LLM calls of a single draft, plus one judge call, in exchange for picking the best of three instead of accepting the first.
 
@@ -24,7 +25,7 @@ crewai install
 cp .env.example .env
 ```
 
-Put your `OPENAI_API_KEY` in `.env`. Add `SERPER_API_KEY` if you want live company research.
+Put your `OPENAI_API_KEY` in `.env`. Add `SERPER_API_KEY` if you want live company research. Add `ANTHROPIC_API_KEY` and/or `GROQ_API_KEY` for genuine cross-model draft diversity — each is independently optional; a voice whose key is missing falls back to OpenAI rather than failing.
 
 Edit `data/sample_lead.json` (or point `LEADS_FILE` at your own JSON) with a real prospect you are allowed to contact, your product, and your physical mailing address.
 

@@ -115,6 +115,24 @@ def _email_guardrail(output: TaskOutput) -> tuple[bool, str | TaskOutput]:
     return (True, output)
 
 
+# Each voice gets a genuinely different model, not just a different prompt on
+# the same model (real diversity, zero extra LLM calls) - with a required env
+# var per non-OpenAI voice. _llm_for() falls back to OpenAI for a voice whose
+# key isn't set, so the crew still runs with only OPENAI_API_KEY configured.
+_VOICE_LLMS = {
+    "direct": ("openai/gpt-4o-mini", None),
+    "consultative": ("anthropic/claude-sonnet-5", "ANTHROPIC_API_KEY"),
+    "curious": ("groq/openai/gpt-oss-120b", "GROQ_API_KEY"),
+}
+
+
+def _llm_for(voice: str) -> str:
+    model, required_key = _VOICE_LLMS[voice]
+    if required_key and not os.getenv(required_key):
+        return "openai/gpt-4o-mini"
+    return model
+
+
 # One directive per draft variant. Each is appended to the shared
 # write_email_task description, so only the voice differs between drafts.
 _DRAFT_VOICES = {
@@ -157,7 +175,7 @@ class OutreachCrew:
         # role, and a de-duplicated agent never gets wired into the crew.
         config = dict(self.agents_config["sdr_copywriter"])  # type: ignore[index]
         config["role"] = f"{config['role'].strip()} ({voice} voice)"
-        return Agent(config=config, knowledge_sources=_playbook_source())
+        return Agent(config=config, llm=_llm_for(voice), knowledge_sources=_playbook_source())
 
     @agent
     def copywriter_direct(self) -> Agent:
