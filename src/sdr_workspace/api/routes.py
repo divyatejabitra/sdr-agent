@@ -180,6 +180,7 @@ def me(user: OwnerUser = Depends(require_owner), settings: Settings = Depends(cu
             "smartlead": "configured" if settings.smartlead_api_key else "disconnected",
             "hubspot": hs.status().detail,
             "ollama": "selectable" if settings.llm_provider == "ollama" else "not_selected",
+            "crewai": "selectable" if settings.llm_provider == "crewai" else "not_selected",
         },
     }
 

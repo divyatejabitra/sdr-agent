@@ -87,9 +87,13 @@ def render_message(
     settings: Settings,
     unsubscribe_url: str,
     offer: Offer | None,
+    skip_footer: bool = False,
 ) -> tuple[str, str, str]:
     body = f"{draft.opening}\n\n{draft.body}".strip()
-    final_text = f"{body}\n{footer(settings, unsubscribe_url, offer)}"
+    # A provider whose draft is already a complete, self-signed email (the
+    # crewai provider - see providers/llm.py) sets skip_footer so sender
+    # identity, the mailing address, and the opt-out line aren't duplicated.
+    final_text = body if skip_footer else f"{body}\n{footer(settings, unsubscribe_url, offer)}"
     html = (
         "<html><body>"
         + "".join(f"<p>{escape(line)}</p>" if line else "<br/>" for line in final_text.splitlines())

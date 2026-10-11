@@ -15,7 +15,7 @@ from sdr_workspace.enums import (
     MessageStatus,
 )
 from sdr_workspace.models import Campaign, CampaignStep, Contact, Enrollment, Message, Offer
-from sdr_workspace.providers.llm import build_draft_prompt, get_llm
+from sdr_workspace.providers.llm import DraftContext, get_llm
 from sdr_workspace.providers.mail import MailAdapter, get_mail_adapter
 from sdr_workspace.providers.sequencer import ColdSequencer, get_sequencer
 from sdr_workspace.services.drafting import approved_knowledge, persist_draft, render_message, validate_draft
@@ -151,11 +151,11 @@ def _send_customer(session, job, settings, clock, mail=None, llm=None) -> None:
     knowledge = approved_knowledge(session)
     offer = session.get(Offer, step.offer_id or campaign.offer_id) if (step.offer_id or campaign.offer_id) else None
     llm = llm or get_llm(settings)
-    prompt = build_draft_prompt(contact, campaign, step, knowledge, offer, "")
+    context = DraftContext(contact=contact, campaign=campaign, step=step, knowledge=knowledge, offer=offer, history="")
     draft = None
     for _ in range(2):
         try:
-            draft = llm.draft(prompt)
+            draft = llm.draft(context)
             draft = validate_draft(draft, knowledge, settings.max_body_words)
             break
         except Exception as exc:  # noqa: BLE001
@@ -171,7 +171,9 @@ def _send_customer(session, job, settings, clock, mail=None, llm=None) -> None:
             review_reasons=["invalid_model_output"],
         )
     unsub = unsubscribe_url(settings, contact.id)
-    subject, text, html = render_message(draft=draft, settings=settings, unsubscribe_url=unsub, offer=offer)
+    subject, text, html = render_message(
+        draft=draft, settings=settings, unsubscribe_url=unsub, offer=offer, skip_footer=(llm.name == "crewai")
+    )
     message = existing or persist_draft(
         session,
         enrollment_id=enrollment.id,

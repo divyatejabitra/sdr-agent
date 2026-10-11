@@ -258,6 +258,11 @@ def _explicit_opt_out(newest: str, quoted: str) -> bool:
     text = newest.lower()
     if "unsubscribe" in quoted.lower() and "unsubscribe" not in text and "stop" not in text:
         return False
+    # Bare "stop" as its own word, not just the phrase "stop emailing" - the
+    # opt-out line sdr_agent's OutreachCrew is required to write is literally
+    # "reply STOP and I won't email again" (see outreach_crew config/tasks.yaml).
+    if any(word.strip(".,!?") == "stop" for word in text.split()):
+        return True
     return any(token in text for token in ("unsubscribe", "stop emailing", "remove me"))
 
 

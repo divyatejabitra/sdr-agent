@@ -59,6 +59,42 @@ To confirm each send by hand, also set `REQUIRE_APPROVAL=true`. The Flow then pr
 
 Use addresses you own while testing. Follow CAN-SPAM / CASL and your own suppression list. This project does not scrape or buy contact lists.
 
+## sdr_workspace
+
+`src/sdr_workspace` is a separate FastAPI + Postgres CRM app living in this
+same repo: contacts, campaigns, enrollments, consent, a job-queue worker,
+inbound-reply handling, and provider adapters (SendGrid/Smartlead/HubSpot).
+Cold outreach there is enrolled straight into an external sequencer and never
+touches an LLM. Onboarding/promotional/reengagement emails to contacts
+already in a campaign *do* go through an LLM drafting step
+(`services/dispatch.py` → `providers/llm.py`), and that step is this
+project's `OutreachCrew` when `LLM_PROVIDER=crewai`:
+
+| `LLM_PROVIDER` | What drafts the email |
+| --- | --- |
+| `mock` (default) | A canned template, no LLM call - good for exercising the pipeline for free |
+| `ollama` | One call to a local model |
+| `crewai` | This repo's `OutreachCrew` - prospect research, three voice variants on different models, a judge, and the compliance pre-check, run once per outbound message |
+
+Set `LLM_PROVIDER=crewai` and run `sdr-worker` / `sdr-workspace serve` as
+usual - no extra keys needed beyond what `crewai run` already uses
+(`OPENAI_API_KEY`, optionally `SERPER_API_KEY`/`ANTHROPIC_API_KEY`/
+`GOOGLE_API_KEY`). `sdr_workspace`'s own `Contact`/`Campaign`/`CampaignStep`/
+`Offer`/approved `KnowledgeSource` rows are mapped onto `OutreachCrew`'s lead
+inputs in `providers/llm.py::_crewai_inputs`; `promotional` campaigns map to
+`offer`, `onboarding`/`reengagement` to `update` (cold never reaches this
+path). `OutreachCrew`'s copywriter is already required to write a complete,
+signed, addressed, opt-out-ending email, so `sdr_workspace` skips appending
+its own footer for this provider rather than writing a duplicate one -
+`sdr_workspace`'s token-signed unsubscribe link is not used for `crewai`
+drafts; a prospect opts out by replying STOP instead, same as any other
+`OutreachCrew` draft, and `sdr_workspace`'s reply classifier already
+recognizes that.
+
+`mock` and `ollama` stay the right default for exercising the CRM pipeline
+cheaply; reach for `crewai` when draft quality (not pipeline cost) is what
+matters for a given campaign.
+
 ## Lead JSON fields
 
 | Field | Purpose |

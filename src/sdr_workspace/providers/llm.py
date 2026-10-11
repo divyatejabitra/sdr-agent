@@ -1,19 +1,37 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import httpx
 
 from sdr_workspace.config import Settings
-from sdr_workspace.enums import ReplyIntent
+from sdr_workspace.enums import CampaignType, ReplyIntent
+from sdr_workspace.models import Campaign, CampaignStep, Contact, KnowledgeSource, Offer
 from sdr_workspace.services.drafting import DRAFT_INSTRUCTIONS, DraftOutput
+
+
+@dataclass
+class DraftContext:
+    """Everything a drafting provider needs for one customer-lifecycle email.
+
+    A dataclass (not a prompt string) so a structured provider - like
+    CrewAiLlm, which hands this to sdr_agent's OutreachCrew as typed inputs
+    rather than a flattened prompt - doesn't have to parse it back out of text.
+    """
+
+    contact: Contact
+    campaign: Campaign
+    step: CampaignStep
+    knowledge: list[KnowledgeSource] = field(default_factory=list)
+    offer: Offer | None = None
+    history: str = ""
 
 
 class LlmProvider(Protocol):
     name: str
 
-    def draft(self, prompt: str) -> DraftOutput: ...
+    def draft(self, context: DraftContext) -> DraftOutput: ...
 
     def classify(self, newest: str, quoted: str) -> dict: ...
 
@@ -21,7 +39,10 @@ class LlmProvider(Protocol):
 class MockLlm:
     name = "mock"
 
-    def draft(self, prompt: str) -> DraftOutput:
+    def draft(self, context: DraftContext) -> DraftOutput:
+        prompt = build_draft_prompt(
+            context.contact, context.campaign, context.step, context.knowledge, context.offer, context.history
+        )
         if "INSUFFICIENT" in prompt:
             return DraftOutput(
                 subject="Quick question",
@@ -65,6 +86,7 @@ class MockLlm:
         mapping = [
             ("unsubscribe", ReplyIntent.UNSUBSCRIBE),
             ("stop emailing", ReplyIntent.UNSUBSCRIBE),
+            ("remove me", ReplyIntent.UNSUBSCRIBE),
             ("out of office", ReplyIntent.OUT_OF_OFFICE),
             ("ooo", ReplyIntent.OUT_OF_OFFICE),
             ("not me", ReplyIntent.WRONG_PERSON),
@@ -78,6 +100,17 @@ class MockLlm:
             ("let's talk", ReplyIntent.INTERESTED),
             ("lets talk", ReplyIntent.INTERESTED),
         ]
+        # Bare "stop" as its own word - the opt-out line OutreachCrew's
+        # sdr_copywriter is required to write ("reply STOP and I won't email
+        # again") is exactly this, not the phrase "stop emailing" the mapping
+        # above alone catches.
+        if any(word.strip(".,!?") == "stop" for word in text.split()):
+            return {
+                "intent": ReplyIntent.UNSUBSCRIBE.value,
+                "confidence": 0.9,
+                "summary": newest[:180],
+                "needs_human": False,
+            }
         for needle, intent in mapping:
             if needle in text:
                 return {
@@ -100,7 +133,10 @@ class OllamaLlm:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def draft(self, prompt: str) -> DraftOutput:
+    def draft(self, context: DraftContext) -> DraftOutput:
+        prompt = build_draft_prompt(
+            context.contact, context.campaign, context.step, context.knowledge, context.offer, context.history
+        )
         payload = {
             "model": self.settings.ollama_model,
             "messages": [
@@ -151,9 +187,125 @@ class OllamaLlm:
             return response.json()["message"]["content"]
 
 
+# campaigns reaching the LLM-draft path are never "cold" (cold enrollment is
+# owned by the ColdSequencer provider in services/dispatch.py, before an LLM
+# is ever touched) - so this only needs to place onboarding/promotional/
+# reengagement into sdr_agent's cold/offer/update vocabulary.
+_CAMPAIGN_TYPE_FOR_OUTREACH_CREW = {
+    CampaignType.PROMOTIONAL.value: "offer",
+    CampaignType.ONBOARDING.value: "update",
+    CampaignType.REENGAGEMENT.value: "update",
+}
+
+_FAILED_DRAFT = DraftOutput(
+    subject="Needs review",
+    body="Draft generation failed.",
+    needs_review=True,
+    review_reasons=["invalid_model_output"],
+)
+
+
+def _crewai_inputs(settings: Settings, context: DraftContext) -> dict:
+    """Map a DraftContext onto the lead-JSON shape sdr_agent.SDRFlow expects.
+
+    sdr_workspace's Settings fields were themselves modeled on this project's
+    sample_lead.json (sender_name/sender_email/business_postal_address line
+    up with sender_name/sender_email/physical_address), so the five fields
+    sdr_agent's own compliance pre-check requires are always present as long
+    as Settings is filled in - no new required config for this to work.
+    """
+    contact = context.contact
+    offer = context.offer
+    facts = "\n".join(f"- [{item.evidence_id}] {item.title}: {item.body}" for item in context.knowledge)
+    extra_notes = (
+        f"Campaign step {context.step.step_number} template hint: {context.step.template}\n"
+        f"Call-to-action hint: {context.step.call_to_action}\n"
+        "Approved facts (cite only these; do not invent others; if none are listed, "
+        "work only from the fields above):\n" + (facts or "(none approved yet)")
+    )
+    prospect_name = f"{contact.first_name} {contact.last_name}".strip() or contact.original_email.split("@")[0]
+    return {
+        "campaign_type": _CAMPAIGN_TYPE_FOR_OUTREACH_CREW.get(context.campaign.campaign_type, "update"),
+        "prospect_name": prospect_name,
+        "prospect_title": contact.role,
+        "prospect_email": contact.original_email,
+        "prospect_company": contact.company,
+        "company_website": "",
+        "sender_name": settings.sender_name,
+        "sender_title": "",
+        "sender_company": settings.business_name,
+        "sender_email": settings.sender_email,
+        "sender_phone": "",
+        "physical_address": settings.business_postal_address,
+        "product_name": offer.product if offer else settings.business_name,
+        "value_proposition": facts or "See extra_notes for approved facts.",
+        "offer_details": (
+            f"{offer.name} — {offer.price_text} {offer.currency}. {offer.terms} Details: {offer.destination_url}"
+            if offer
+            else ""
+        ),
+        "update_details": context.step.template,
+        "extra_notes": extra_notes,
+    }
+
+
+class CrewAiLlm:
+    """Drafts customer-lifecycle emails via sdr_agent's OutreachCrew instead
+    of a single templated call - real research (when SERPER_API_KEY is set),
+    three voice variants on genuinely different models, a judge, and
+    sdr_agent's own anti-hallucination/compliance guardrails, in exchange for
+    a slower and far more expensive draft step than Mock/Ollama.
+
+    The crew's own sdr_copywriter is already required (see
+    sdr_agent/crews/outreach_crew/config/tasks.yaml) to write the full
+    signature, physical address, and "reply STOP" opt-out line into the body
+    - so unlike Mock/Ollama, this provider's draft is the complete email.
+    dispatch.py skips drafting.footer() for this provider rather than
+    appending a second, duplicate one.
+    """
+
+    name = "crewai"
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def draft(self, context: DraftContext) -> DraftOutput:
+        from sdr_agent.crews.outreach_crew.outreach_crew import OutreachCrew, research_tools_status_note
+        from sdr_agent.schemas import OutreachEmail
+
+        inputs = _crewai_inputs(self.settings, context)
+        inputs["tools_status_note"] = research_tools_status_note()
+        try:
+            result = OutreachCrew().crew().kickoff(inputs=inputs)
+        except Exception:  # noqa: BLE001 - a crew failure must not crash the job
+            return _FAILED_DRAFT
+
+        email = result.pydantic
+        if not isinstance(email, OutreachEmail):
+            return _FAILED_DRAFT
+        return DraftOutput(
+            subject=email.subject,
+            opening="",
+            body=email.body,
+            # Not real evidence-citation tracking (OutreachEmail has no
+            # evidence_ids field) - deliberately empty so validate_draft's
+            # unknown_evidence check never fires a false positive here.
+            evidence_ids=[],
+            needs_review=False,
+            review_reasons=[],
+        )
+
+    def classify(self, newest: str, quoted: str) -> dict:
+        # OutreachCrew has no reply-classification task; reuse the mock
+        # heuristic rather than inventing a second one.
+        return MockLlm().classify(newest, quoted)
+
+
 def get_llm(settings: Settings) -> LlmProvider:
     if settings.llm_provider == "ollama":
         return OllamaLlm(settings)
+    if settings.llm_provider == "crewai":
+        return CrewAiLlm(settings)
     return MockLlm()
 
 

@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     max_body_words: int = 120
     test_recipient_allowlist: str = "owner@example.com,qa@example.com"
 
-    llm_provider: Literal["mock", "ollama"] = "mock"
+    llm_provider: Literal["mock", "ollama", "crewai"] = "mock"
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "llama3.1"
     llm_timeout_seconds: float = 20.0
