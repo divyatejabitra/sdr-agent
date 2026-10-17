@@ -139,6 +139,55 @@ _VOICE_REQUIRED_KEYS = {
 }
 
 
+def _with_runtime_fallback(primary: LLM, fallback: LLM, voice: str) -> LLM:
+    """Wrap `primary` so a failure inside .call() - a quota, a retired model
+    id, an outage - falls back to `fallback` for that call instead of
+    crashing the whole crew. _llm_for()'s key-presence check below only
+    catches a voice whose key is simply absent; it can't catch a key that
+    exists but whose provider is unavailable right now, which is exactly
+    what happened the day Gemini's free-tier daily cap was hit mid-run.
+
+    Subclassing crewai.LLM itself doesn't work: LLM.__new__ is a factory
+    that always constructs and returns a concrete provider class (here,
+    OpenAICompletion) rather than an instance of cls, so a subclass's own
+    __init__/call() would never actually run. This instead subclasses
+    OpenAICompletion directly, constructing it with the same kwargs
+    LLM.__new__ would have derived for the "openai/<model> + custom
+    base_url" shape _llm_for() uses for Gemini - bypassing LLM's factory
+    __new__ entirely rather than fighting it.
+    """
+    try:
+        from crewai.llms.providers.openai.completion import OpenAICompletion
+        from pydantic import PrivateAttr
+
+        class _FallbackOpenAICompletion(OpenAICompletion):
+            _fallback_llm: LLM = PrivateAttr()
+            _voice: str = PrivateAttr(default="")
+
+            def call(self, *args, **kwargs):
+                try:
+                    return super().call(*args, **kwargs)
+                except Exception as exc:  # noqa: BLE001 - must not crash the crew
+                    print(
+                        f"{self._voice} voice: primary LLM failed ({exc}); "
+                        "falling back to OpenAI for this call."
+                    )
+                    return self._fallback_llm.call(*args, **kwargs)
+
+        wrapped = _FallbackOpenAICompletion(
+            model=primary.model,
+            provider="openai",
+            custom_openai=True,
+            base_url=primary.base_url,
+            api_key=primary.api_key,
+        )
+        wrapped._fallback_llm = fallback
+        wrapped._voice = voice
+        return wrapped
+    except Exception:  # noqa: BLE001 - a future crewai internals change must degrade, not crash
+        return primary
+
+
 def _llm_for(voice: str) -> str | LLM:
     required_key = _VOICE_REQUIRED_KEYS[voice]
     if required_key and not os.getenv(required_key):
@@ -146,11 +195,12 @@ def _llm_for(voice: str) -> str | LLM:
     if voice == "consultative":
         return "anthropic/claude-sonnet-5"
     if voice == "curious":
-        return LLM(
+        gemini = LLM(
             model=f"openai/{GEMINI_MODEL}",
             base_url=GEMINI_BASE_URL,
             api_key=os.environ["GOOGLE_API_KEY"],
         )
+        return _with_runtime_fallback(gemini, LLM(model=_FALLBACK_LLM), voice)
     return _FALLBACK_LLM
 
 
