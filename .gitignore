@@ -5,3 +5,4 @@ lib/
 output/
 .venv/
 uv.lock
+data/real_lead.json
