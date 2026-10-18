@@ -106,6 +106,49 @@ def execute_job(
         complete(session, job, JobStatus.SUCCEEDED.value)
 
 
+def draft_message(
+    session: Session,
+    settings: Settings,
+    *,
+    contact: Contact,
+    campaign: Campaign,
+    step: CampaignStep,
+    llm=None,
+) -> tuple:
+    """Produce one email's drafted content - the shared core of a real send
+    (_send_customer, below) and a synchronous preview (api/routes.py's
+    draft-now endpoint). Never persists a Message row or sends anything;
+    the caller decides what to do with the result. Returns
+    (draft: DraftOutput, subject, text, html, provider_name).
+    """
+    from sdr_workspace.services.drafting import DraftOutput
+
+    knowledge = approved_knowledge(session)
+    offer = session.get(Offer, step.offer_id or campaign.offer_id) if (step.offer_id or campaign.offer_id) else None
+    llm = llm or get_llm(settings)
+    context = DraftContext(contact=contact, campaign=campaign, step=step, knowledge=knowledge, offer=offer, history="")
+    draft = None
+    for _ in range(2):
+        try:
+            draft = llm.draft(context)
+            draft = validate_draft(draft, knowledge, settings.max_body_words)
+            break
+        except Exception:  # noqa: BLE001 - a bad/unreachable provider must produce a needs_review draft, not crash
+            draft = None
+    if draft is None:
+        draft = DraftOutput(
+            subject="Needs review",
+            body="Draft generation failed.",
+            needs_review=True,
+            review_reasons=["invalid_model_output"],
+        )
+    unsub = unsubscribe_url(settings, contact.id)
+    subject, text, html = render_message(
+        draft=draft, settings=settings, unsubscribe_url=unsub, offer=offer, skip_footer=(llm.name == "crewai")
+    )
+    return draft, subject, text, html, llm.name
+
+
 def _send_customer(session, job, settings, clock, mail=None, llm=None) -> None:
     enrollment = session.get(Enrollment, job.payload["enrollment_id"])
     if enrollment is None:
@@ -148,31 +191,8 @@ def _send_customer(session, job, settings, clock, mail=None, llm=None) -> None:
     if existing and existing.status == MessageStatus.UNKNOWN.value:
         complete(session, job, JobStatus.UNKNOWN.value, "unresolved_prior_attempt")
         return
-    knowledge = approved_knowledge(session)
-    offer = session.get(Offer, step.offer_id or campaign.offer_id) if (step.offer_id or campaign.offer_id) else None
-    llm = llm or get_llm(settings)
-    context = DraftContext(contact=contact, campaign=campaign, step=step, knowledge=knowledge, offer=offer, history="")
-    draft = None
-    for _ in range(2):
-        try:
-            draft = llm.draft(context)
-            draft = validate_draft(draft, knowledge, settings.max_body_words)
-            break
-        except Exception as exc:  # noqa: BLE001
-            last_error = str(exc)
-            draft = None
-    if draft is None:
-        from sdr_workspace.services.drafting import DraftOutput
-
-        draft = DraftOutput(
-            subject="Needs review",
-            body="Draft generation failed.",
-            needs_review=True,
-            review_reasons=["invalid_model_output"],
-        )
-    unsub = unsubscribe_url(settings, contact.id)
-    subject, text, html = render_message(
-        draft=draft, settings=settings, unsubscribe_url=unsub, offer=offer, skip_footer=(llm.name == "crewai")
+    draft, subject, text, html, _provider = draft_message(
+        session, settings, contact=contact, campaign=campaign, step=step, llm=llm
     )
     message = existing or persist_draft(
         session,

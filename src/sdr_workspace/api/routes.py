@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from sdr_workspace.api.deps import current_settings, get_clock, get_db, require_internal, require_owner
 from sdr_workspace.clock import Clock
 from sdr_workspace.config import Settings
-from sdr_workspace.enums import CampaignStatus, JobStatus, KnowledgeStatus, OfferStatus
+from sdr_workspace.enums import CampaignStatus, CampaignType, JobStatus, KnowledgeStatus, OfferStatus
 from sdr_workspace.models import (
     AppSetting,
     AuditLog,
@@ -35,7 +35,7 @@ from sdr_workspace.models import (
 )
 from sdr_workspace.providers.hubspot import HubSpotAdapter
 from sdr_workspace.services.contacts import import_contacts, record_consent
-from sdr_workspace.services.dispatch import dispatch_tick, enroll_ready_prospects, execute_job
+from sdr_workspace.services.dispatch import dispatch_tick, draft_message, enroll_ready_prospects, execute_job
 from sdr_workspace.services.eligibility import evaluate_eligibility, explain_contact
 from sdr_workspace.services.enrollments import complete_enrollment, enroll_contact, pause_enrollment
 from sdr_workspace.services.events import apply_event, ingest_reply, persist_event, record_conversion, suppress
@@ -347,6 +347,56 @@ def create_enrollment(
     except ValueError as exc:
         raise HTTPException(400, detail={"code": "ineligible", "reasons": str(exc).split(",")}) from exc
     return _enrollment_out(enrollment)
+
+
+@router.post("/api/enrollments/{enrollment_id}/draft-now")
+def draft_now(
+    enrollment_id: UUID,
+    step_number: int | None = Query(default=None, description="Defaults to the enrollment's current step"),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(current_settings),
+    _: OwnerUser = Depends(require_owner),
+):
+    """Synchronously draft (never sends, never persists a Message row) using
+    whichever provider LLM_PROVIDER currently selects - mock/ollama/crewai.
+    For testing a provider's output on demand, without waiting for
+    dispatch_tick + the worker's normal cadence to pick the enrollment up.
+    """
+    enrollment = db.get(Enrollment, enrollment_id)
+    if enrollment is None:
+        raise HTTPException(status_code=404, detail={"code": "enrollment_not_found"})
+    campaign = db.get(Campaign, enrollment.campaign_id)
+    contact = db.get(Contact, enrollment.contact_id)
+    if campaign is None or contact is None:
+        raise HTTPException(status_code=404, detail={"code": "missing_context"})
+    if campaign.campaign_type == CampaignType.COLD.value:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "cold_has_no_llm_draft",
+                "message": "Cold campaigns are enrolled via the sequencer and never drafted by an LLM.",
+            },
+        )
+    step = db.scalar(
+        select(CampaignStep).where(
+            CampaignStep.campaign_id == campaign.id,
+            CampaignStep.step_number == (step_number if step_number is not None else enrollment.current_step),
+        )
+    )
+    if step is None:
+        raise HTTPException(status_code=404, detail={"code": "step_not_found"})
+
+    draft, subject, text, html, provider = draft_message(db, settings, contact=contact, campaign=campaign, step=step)
+    return {
+        "provider": provider,
+        "enrollment_id": str(enrollment.id),
+        "step_number": step.step_number,
+        "subject": subject,
+        "text": text,
+        "html": html,
+        "needs_review": draft.needs_review,
+        "review_reasons": draft.review_reasons,
+    }
 
 
 @router.post("/api/enrollments/{enrollment_id}/pause")
